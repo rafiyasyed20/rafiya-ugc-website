@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, MapPin, Sparkles } from "lucide-react";
-import portrait from "@/assets/hero-portrait.jpg";
+import portrait from "@/assets/rafiya-hero.png";
 
 export function Hero() {
     return (
@@ -28,9 +28,7 @@ export function Hero() {
                     </div>
 
                     <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05]">
-                        Creating beauty content
-                        <br />
-                        brands actually
+                        Creating beauty content that brands actually
                         <span className="font-display italic text-gradient"> remember.</span>
                     </h1>
 
