@@ -1,14 +1,37 @@
+import emailjs from "@emailjs/browser";
 import { motion } from "framer-motion";
 import { Mail, Instagram, ArrowRight } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID as string;
+const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID as string;
+const PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY as string;
+
+type Status = "idle" | "loading" | "success" | "error";
 
 export function Contact() {
-    const [sent, setSent] = useState(false);
+    const formRef = useRef<HTMLFormElement>(null);
+    const [status, setStatus] = useState<Status>("idle");
+
+    async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+        e.preventDefault();
+        setStatus("loading");
+
+        try {
+            await emailjs.sendForm(SERVICE_ID, TEMPLATE_ID, formRef.current!, {
+                publicKey: PUBLIC_KEY,
+            });
+            setStatus("success");
+            formRef.current?.reset();
+        } catch {
+            setStatus("error");
+        }
+    }
 
     return (
         <section id="contact" className="relative py-28 px-6 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-soft" />
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[50rem] h-[50rem] rounded-full bg-rose/20 blur-3xl" />
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-200 h-200 rounded-full bg-rose/20 blur-3xl" />
 
             <div className="relative mx-auto max-w-5xl">
                 <motion.div
@@ -32,23 +55,22 @@ export function Contact() {
                 </motion.div>
 
                 <motion.form
+                    ref={formRef}
                     initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.7 }}
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        setSent(true);
-                    }}
-                    className="glass rounded-[2rem] p-8 sm:p-10 shadow-glow max-w-2xl mx-auto"
+                    onSubmit={handleSubmit}
+                    className="glass rounded-4xl p-8 sm:p-10 shadow-glow max-w-2xl mx-auto"
                 >
                     <div className="grid sm:grid-cols-2 gap-5">
-                        <Field label="Your name" name="name" placeholder="Jane Doe" />
+                        <Field label="Your name" name="from_name" placeholder="Jane Doe" required />
                         <Field
                             label="Email"
-                            name="email"
+                            name="from_email"
                             type="email"
                             placeholder="hello@brand.com"
+                            required
                         />
                         <Field label="Brand" name="brand" placeholder="Brand name" />
                         <Field label="Budget" name="budget" placeholder="$" />
@@ -60,17 +82,27 @@ export function Contact() {
                         <textarea
                             name="message"
                             rows={5}
+                            required
                             placeholder="Tell me about your brand and what you're imagining..."
                             className="mt-2 w-full rounded-2xl bg-background/60 border border-border/60 px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-ring transition resize-none"
                         />
                     </div>
+
+                    {status === "error" && (
+                        <p className="mt-4 text-sm text-destructive text-center">
+                            Something went wrong. Please try again or email directly.
+                        </p>
+                    )}
+
                     <button
                         type="submit"
-                        disabled={sent}
+                        disabled={status === "loading" || status === "success"}
                         className="group mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background py-4 text-sm hover:opacity-90 transition disabled:opacity-60"
                     >
-                        {sent ? (
+                        {status === "success" ? (
                             "Thank you — I'll be in touch soon."
+                        ) : status === "loading" ? (
+                            "Sending…"
                         ) : (
                             <>
                                 Send Inquiry{" "}
@@ -121,11 +153,13 @@ function Field({
     name,
     type = "text",
     placeholder,
+    required,
 }: {
     label: string;
     name: string;
     type?: string;
     placeholder?: string;
+    required?: boolean;
 }) {
     return (
         <div>
@@ -136,6 +170,7 @@ function Field({
                 name={name}
                 type={type}
                 placeholder={placeholder}
+                required={required}
                 className="mt-2 w-full rounded-full bg-background/60 border border-border/60 px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-ring transition"
             />
         </div>
