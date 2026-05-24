@@ -1,20 +1,19 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { X, ExternalLink } from "lucide-react";
-import { getPortfolioLinksFn } from "@/lib/admin-fns";
-import type { PortfolioLink } from "@prisma/client";
+import { getPortfolioLinksFn, type PortfolioItem } from "@/lib/admin-fns";
 
 const filters = ["All", "Makeup", "Skincare", "Lifestyle", "Product Demo", "Voiceover", "B-Roll"];
 
 export function Portfolio() {
     const [active, setActive] = useState("All");
-    const [lightbox, setLightbox] = useState<PortfolioLink | null>(null);
-    const [links, setLinks] = useState<PortfolioLink[]>([]);
+    const [lightbox, setLightbox] = useState<PortfolioItem | null>(null);
+    const [links, setLinks] = useState<PortfolioItem[]>([]);
     const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
         getPortfolioLinksFn()
-            .then((data) => setLinks(data as PortfolioLink[]))
+            .then((data: PortfolioItem[]) => setLinks(Array.isArray(data) ? data : []))
             .catch(() => setLinks([]))
             .finally(() => setLoaded(true));
     }, []);
@@ -95,7 +94,7 @@ function PortfolioCard({
     index,
     onClick,
 }: {
-    item: PortfolioLink;
+    item: PortfolioItem;
     index: number;
     onClick: () => void;
 }) {
@@ -136,7 +135,7 @@ function PortfolioCard({
     );
 }
 
-function ViewModal({ link, onClose }: { link: PortfolioLink; onClose: () => void }) {
+function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void }) {
     const isTikTok = link.platform === "tiktok";
     const isInstagram = link.platform === "instagram";
     const tiktokVideoId = link.url.match(/\/video\/(\d+)/)?.[1];

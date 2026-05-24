@@ -2,6 +2,17 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getDb } from "./db";
 
+// Serialization-safe type: no Date fields, only JSON primitives
+export type PortfolioItem = {
+    id: string;
+    url: string;
+    platform: string;
+    category: string;
+    title: string;
+    tall: boolean;
+    sortOrder: number;
+};
+
 async function getExpectedToken(): Promise<string> {
     const username = process.env.VERCEL_ADMIN_UAERNAME ?? "";
     const password = process.env.VERCEL_ADMIN_PASSWORD ?? "";
@@ -33,11 +44,22 @@ export const verifyTokenFn = createServerFn({ method: "POST" })
 
 export const getPortfolioLinksFn = createServerFn({ method: "GET" }).handler(async () => {
     try {
+        // select only primitive fields — Date fields cause serialization issues
+        // across TanStack Start's server function boundary in production builds
         return await getDb().portfolioLink.findMany({
+            select: {
+                id: true,
+                url: true,
+                platform: true,
+                category: true,
+                title: true,
+                tall: true,
+                sortOrder: true,
+            },
             orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         });
     } catch {
-        return [];
+        return [] as PortfolioItem[];
     }
 });
 
@@ -63,7 +85,17 @@ export const createPortfolioLinkFn = createServerFn({ method: "POST" })
               ? "tiktok"
               : "other";
 
-        return await getDb().portfolioLink.create({ data: { ...linkData, platform } });
+        const created = await getDb().portfolioLink.create({ data: { ...linkData, platform } });
+        // return only primitive fields
+        return {
+            id: created.id,
+            url: created.url,
+            platform: created.platform,
+            category: created.category,
+            title: created.title,
+            tall: created.tall,
+            sortOrder: created.sortOrder,
+        } satisfies PortfolioItem;
     });
 
 export const deletePortfolioLinkFn = createServerFn({ method: "POST" })
