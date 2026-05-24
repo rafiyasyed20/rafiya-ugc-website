@@ -14,8 +14,8 @@ export type PortfolioItem = {
 };
 
 async function getExpectedToken(): Promise<string> {
-    const username = process.env.VERCEL_ADMIN_UAERNAME ?? "";
-    const password = process.env.VERCEL_ADMIN_PASSWORD ?? "";
+    const username = process.env.ADMIN_USERNAME ?? "";
+    const password = process.env.ADMIN_PASSWORD ?? "";
     const data = new TextEncoder().encode(`${username}:${password}`);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(hashBuffer))
@@ -27,8 +27,8 @@ export const loginFn = createServerFn({ method: "POST" })
     .inputValidator(z.object({ username: z.string(), password: z.string() }))
     .handler(async ({ data }) => {
         if (
-            data.username !== process.env.VERCEL_ADMIN_UAERNAME ||
-            data.password !== process.env.VERCEL_ADMIN_PASSWORD
+            data.username !== process.env.ADMIN_USERNAME ||
+            data.password !== process.env.ADMIN_PASSWORD
         ) {
             throw new Error("Invalid credentials");
         }
