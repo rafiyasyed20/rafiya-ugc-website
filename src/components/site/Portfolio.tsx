@@ -5,6 +5,35 @@ import { getPortfolioLinksFn, type PortfolioItem } from "@/lib/admin-fns";
 
 const filters = ["All", "Makeup", "Skincare", "Lifestyle", "Product Demo", "Voiceover", "B-Roll"];
 
+// Module-level state so embed.js is only fetched once per page load
+let igScriptState: "idle" | "loading" | "loaded" = "idle";
+const igScriptCallbacks: (() => void)[] = [];
+
+function ensureInstagramEmbedJs(onReady: () => void) {
+    const w = window as Window & { instgrm?: { Embeds: { process: () => void } } };
+    if (w.instgrm) {
+        onReady();
+        return;
+    }
+    igScriptCallbacks.push(onReady);
+    if (igScriptState !== "idle") return;
+    igScriptState = "loading";
+
+    const existing = document.getElementById("ig-embed-js");
+    if (existing) existing.remove();
+
+    const script = document.createElement("script");
+    script.id = "ig-embed-js";
+    script.src = "//www.instagram.com/embed.js";
+    script.async = true;
+    script.onload = () => {
+        igScriptState = "loaded";
+        const pending = igScriptCallbacks.splice(0);
+        pending.forEach((cb) => cb());
+    };
+    document.body.appendChild(script);
+}
+
 export function Portfolio() {
     const [active, setActive] = useState("All");
     const [lightbox, setLightbox] = useState<PortfolioItem | null>(null);
@@ -69,14 +98,28 @@ export function Portfolio() {
                         className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5"
                     >
                         <AnimatePresence>
-                            {filtered.map((item, i) => (
-                                <PortfolioCard
-                                    key={item.id}
-                                    item={item}
-                                    index={i}
-                                    onClick={() => setLightbox(item)}
-                                />
-                            ))}
+                            {filtered.map((item, i) =>
+                                item.platform === "instagram" ? (
+                                    <motion.div
+                                        key={item.id}
+                                        layout
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        transition={{ duration: 0.4, delay: i * 0.04 }}
+                                        className="break-inside-avoid"
+                                    >
+                                        <InstagramEmbed url={item.url} />
+                                    </motion.div>
+                                ) : (
+                                    <PortfolioCard
+                                        key={item.id}
+                                        item={item}
+                                        index={i}
+                                        onClick={() => setLightbox(item)}
+                                    />
+                                )
+                            )}
                         </AnimatePresence>
                     </motion.div>
                 )}
@@ -98,7 +141,6 @@ function PortfolioCard({
     index: number;
     onClick: () => void;
 }) {
-    const isInstagram = item.platform === "instagram";
     const isTikTok = item.platform === "tiktok";
 
     return (
@@ -112,15 +154,12 @@ function PortfolioCard({
             className={`group relative break-inside-avoid rounded-3xl overflow-hidden cursor-pointer shadow-card hover:shadow-glow transition ${
                 item.tall ? "aspect-[3/4]" : "aspect-square"
             } ${
-                isInstagram
-                    ? "bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]"
-                    : isTikTok
-                      ? "bg-gradient-to-br from-[#010101] via-[#1a1a2e] to-[#16213e]"
-                      : "bg-gradient-to-br from-foreground/10 to-foreground/5"
+                isTikTok
+                    ? "bg-gradient-to-br from-[#010101] via-[#1a1a2e] to-[#16213e]"
+                    : "bg-gradient-to-br from-foreground/10 to-foreground/5"
             }`}
         >
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-white">
-                {isInstagram && <InstagramIcon className="w-10 h-10 fill-white/80 mb-4" />}
                 {isTikTok && <TikTokIcon className="w-10 h-10 mb-4" />}
                 <p className="text-xs uppercase tracking-widest opacity-70 mb-1">{item.category}</p>
                 <p className="font-serif text-lg text-center leading-snug">{item.title}</p>
@@ -128,7 +167,7 @@ function PortfolioCard({
 
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-end justify-center pb-6">
                 <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white text-xs font-medium bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                    {isTikTok ? "Watch video" : "View post"}
+                    {isTikTok ? "Watch video" : "View content"}
                 </span>
             </div>
         </motion.div>
@@ -137,7 +176,6 @@ function PortfolioCard({
 
 function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void }) {
     const isTikTok = link.platform === "tiktok";
-    const isInstagram = link.platform === "instagram";
     const tiktokVideoId = link.url.match(/\/video\/(\d+)/)?.[1];
 
     return (
@@ -155,7 +193,6 @@ function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void
                 onClick={(e) => e.stopPropagation()}
                 className="cursor-default"
             >
-                {/* TikTok: actual iframe embed works fine */}
                 {isTikTok && tiktokVideoId && (
                     <iframe
                         src={`https://www.tiktok.com/embed/v2/${tiktokVideoId}`}
@@ -168,23 +205,6 @@ function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void
                     />
                 )}
 
-                {/* Instagram: standard blockquote embed — works on production, console errors on localhost only */}
-                {isInstagram && <InstagramEmbed url={link.url} />}
-
-                {/* Fallback for "other" platform */}
-                {!isInstagram && !isTikTok && (
-                    <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-6 py-3 rounded-full glass text-white text-sm font-medium"
-                    >
-                        <ExternalLink className="w-4 h-4" />
-                        View content
-                    </a>
-                )}
-
-                {/* TikTok fallback if no video ID */}
                 {isTikTok && !tiktokVideoId && (
                     <a
                         href={link.url}
@@ -194,6 +214,18 @@ function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void
                     >
                         <ExternalLink className="w-4 h-4" />
                         View on TikTok
+                    </a>
+                )}
+
+                {!isTikTok && (
+                    <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-6 py-3 rounded-full glass text-white text-sm font-medium"
+                    >
+                        <ExternalLink className="w-4 h-4" />
+                        View content
                     </a>
                 )}
             </motion.div>
@@ -216,41 +248,25 @@ function InstagramEmbed({ url }: { url: string }) {
         const container = ref.current;
         if (!container) return;
 
-        // Set innerHTML to bypass React's vdom — embed.js rewrites this into an iframe
         container.innerHTML = `<blockquote
             class="instagram-media"
             data-instgrm-captioned
             data-instgrm-permalink="${url}?utm_source=ig_embed&utm_campaign=loading"
             data-instgrm-version="14"
-            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:1px;max-width:540px;min-width:326px;padding:0;width:99.375%;">
+            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:0 auto;max-width:540px;min-width:326px;padding:0;width:99.375%;">
         </blockquote>`;
 
-        const w = window as Window & { instgrm?: { Embeds: { process: () => void } } };
-        if (w.instgrm) {
-            w.instgrm.Embeds.process();
-        } else {
-            document.getElementById("ig-embed-js")?.remove();
-            const script = document.createElement("script");
-            script.id = "ig-embed-js";
-            script.src = "//www.instagram.com/embed.js";
-            script.async = true;
-            document.body.appendChild(script);
-        }
+        ensureInstagramEmbedJs(() => {
+            const w = window as Window & { instgrm?: { Embeds: { process: () => void } } };
+            w.instgrm?.Embeds.process();
+        });
 
         return () => {
-            if (ref.current) ref.current.innerHTML = "";
+            if (container) container.innerHTML = "";
         };
     }, [url]);
 
-    return <div ref={ref} className="max-w-135" />;
-}
-
-function InstagramIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-        </svg>
-    );
+    return <div ref={ref} className="w-full" />;
 }
 
 function TikTokIcon({ className }: { className?: string }) {
