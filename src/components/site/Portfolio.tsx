@@ -241,19 +241,33 @@ function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void
     );
 }
 
+function instagramCanonicalUrl(raw: string): string {
+    // Instagram's embed endpoint only works with /p/SHORTCODE/ — strip the username prefix if present
+    const shortcode = raw.match(/\/p\/([A-Za-z0-9_-]+)/)?.[1];
+    return shortcode ? `https://www.instagram.com/p/${shortcode}/` : raw;
+}
+
+// Instagram's profile-header row (avatar + username + follow button) is roughly
+// 56 px tall inside their embed iframe.  We can't touch the iframe's DOM
+// (cross-origin), but clip-path on the *outside* wrapper crops the painted pixels
+// of everything inside — including the iframe — before they reach the screen.
+// A matching negative margin-top reclaims that layout space so the grid stays tight.
+const IG_CLIP_PX = 56;
+
 function InstagramEmbed({ url }: { url: string }) {
-    const ref = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLDivElement>(null);
+    const canonical = instagramCanonicalUrl(url);
+    const embedHref = `${canonical}?utm_source=ig_embed&amp;utm_campaign=loading`;
 
     useEffect(() => {
-        const container = ref.current;
-        if (!container) return;
+        const inner = innerRef.current;
+        if (!inner) return;
 
-        container.innerHTML = `<blockquote
+        inner.innerHTML = `<blockquote
             class="instagram-media"
-            data-instgrm-captioned
-            data-instgrm-permalink="${url}?utm_source=ig_embed&utm_campaign=loading"
+            data-instgrm-permalink="${embedHref}"
             data-instgrm-version="14"
-            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:0 auto;max-width:540px;min-width:326px;padding:0;width:99.375%;">
+            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:1px auto;max-width:540px;min-width:326px;padding:0;width:99.375%;width:-webkit-calc(100% - 2px);width:calc(100% - 2px);">
         </blockquote>`;
 
         ensureInstagramEmbedJs(() => {
@@ -262,11 +276,22 @@ function InstagramEmbed({ url }: { url: string }) {
         });
 
         return () => {
-            if (container) container.innerHTML = "";
+            if (inner) inner.innerHTML = "";
         };
-    }, [url]);
+    }, [canonical, embedHref]);
 
-    return <div ref={ref} className="w-full" />;
+    return (
+        <div
+            style={{
+                // Crop the top IG_CLIP_PX of painted output (hides the header row)
+                clipPath: `inset(${IG_CLIP_PX}px 0 0 0)`,
+                // Pull the element up by the same amount so the grid gap is unchanged
+                marginTop: `-${IG_CLIP_PX}px`,
+            }}
+        >
+            <div ref={innerRef} />
+        </div>
+    );
 }
 
 function TikTokIcon({ className }: { className?: string }) {
