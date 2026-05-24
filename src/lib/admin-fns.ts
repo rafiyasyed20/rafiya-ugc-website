@@ -106,3 +106,22 @@ export const deletePortfolioLinkFn = createServerFn({ method: "POST" })
         await getDb().portfolioLink.delete({ where: { id: data.id } });
         return { success: true };
     });
+
+export const reorderPortfolioLinksFn = createServerFn({ method: "POST" })
+    .inputValidator(
+        z.object({
+            token: z.string(),
+            items: z.array(z.object({ id: z.string(), sortOrder: z.number() })),
+        })
+    )
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        const db = getDb();
+        await db.$transaction(
+            data.items.map(({ id, sortOrder }) =>
+                db.portfolioLink.update({ where: { id }, data: { sortOrder } })
+            )
+        );
+        return { success: true };
+    });

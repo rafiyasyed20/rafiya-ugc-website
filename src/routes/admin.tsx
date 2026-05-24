@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, Plus, LogOut, Eye, EyeOff, Shield } from "lucide-react";
+import { Trash2, Plus, LogOut, Eye, EyeOff, Shield, GripVertical } from "lucide-react";
 import {
     loginFn,
     verifyTokenFn,
     getPortfolioLinksFn,
     createPortfolioLinkFn,
     deletePortfolioLinkFn,
+    reorderPortfolioLinksFn,
+    type PortfolioItem,
 } from "@/lib/admin-fns";
-import type { PortfolioLink } from "@prisma/client";
 
 const CATEGORIES = [
     "Makeup",
@@ -159,11 +160,13 @@ function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-    const [links, setLinks] = useState<PortfolioLink[]>([]);
+    const [links, setLinks] = useState<PortfolioItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [filter, setFilter] = useState("All");
+    const [dragItem, setDragItem] = useState<{ id: string; category: string } | null>(null);
+    const [dragOverId, setDragOverId] = useState<string | null>(null);
 
     const [form, setForm] = useState({
         url: "",
@@ -177,7 +180,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         setLoading(true);
         try {
             const data = await getPortfolioLinksFn();
-            setLinks(data as PortfolioLink[]);
+            setLinks(data as PortfolioItem[]);
         } finally {
             setLoading(false);
         }
@@ -218,8 +221,65 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         }
     };
 
-    const filtered = filter === "All" ? links : links.filter((l) => l.category === filter);
+    const handleDragStart = (id: string, category: string) => {
+        setDragItem({ id, category });
+    };
+
+    const handleDragOver = (e: React.DragEvent, targetId: string, targetCategory: string) => {
+        e.preventDefault();
+        if (dragItem && dragItem.category === targetCategory && targetId !== dragItem.id) {
+            setDragOverId(targetId);
+        }
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetId: string, targetCategory: string) => {
+        e.preventDefault();
+        if (!dragItem || dragItem.category !== targetCategory || dragItem.id === targetId) {
+            setDragItem(null);
+            setDragOverId(null);
+            return;
+        }
+
+        const categoryLinks = links
+            .filter((l) => l.category === dragItem.category)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+
+        const fromIdx = categoryLinks.findIndex((l) => l.id === dragItem.id);
+        const toIdx = categoryLinks.findIndex((l) => l.id === targetId);
+        const reordered = [...categoryLinks];
+        const [moved] = reordered.splice(fromIdx, 1);
+        reordered.splice(toIdx, 0, moved);
+
+        const updates = reordered.map((l, i) => ({ id: l.id, sortOrder: i * 10 }));
+
+        setLinks((prev) => {
+            const others = prev.filter((l) => l.category !== dragItem.category);
+            const updated = reordered.map((l, i) => ({ ...l, sortOrder: i * 10 }));
+            return [...others, ...updated];
+        });
+        setDragItem(null);
+        setDragOverId(null);
+
+        try {
+            await reorderPortfolioLinksFn({ data: { token, items: updates } });
+        } catch {
+            await fetchLinks();
+        }
+    };
+
+    const handleDragEnd = () => {
+        setDragItem(null);
+        setDragOverId(null);
+    };
+
+    const sortedLinks = [...links].sort((a, b) => a.sortOrder - b.sortOrder);
+    const filtered = filter === "All" ? sortedLinks : sortedLinks.filter((l) => l.category === filter);
     const allCategories = ["All", ...Array.from(new Set(links.map((l) => l.category)))];
+    const grouped = filtered.reduce<Record<string, PortfolioItem[]>>((acc, link) => {
+        (acc[link.category] ??= []).push(link);
+        return acc;
+    }, {});
+    const categoryOrder = Array.from(new Set(filtered.map((l) => l.category)));
 
     return (
         <div className="min-h-screen bg-background">
@@ -384,44 +444,66 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                             No links yet. Add your first portfolio link above.
                         </div>
                     ) : (
-                        <ul className="space-y-2">
-                            {filtered.map((link) => (
-                                <li
-                                    key={link.id}
-                                    className="flex items-start gap-3 rounded-2xl border border-border p-4"
-                                >
-                                    <PlatformBadge platform={link.platform} />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-medium text-sm">{link.title}</span>
-                                            <span className="px-2 py-0.5 rounded-full bg-foreground/5 text-xs">
-                                                {link.category}
-                                            </span>
-                                            {link.tall && (
-                                                <span className="px-2 py-0.5 rounded-full bg-foreground/5 text-xs text-muted-foreground">
-                                                    tall
-                                                </span>
-                                            )}
-                                        </div>
-                                        <a
-                                            href={link.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs text-muted-foreground hover:text-foreground truncate block mt-0.5 max-w-xs"
-                                        >
-                                            {link.url}
-                                        </a>
-                                    </div>
-                                    <button
-                                        onClick={() => handleDelete(link.id)}
-                                        className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 mt-0.5"
-                                        aria-label="Delete"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </li>
+                        <div className="space-y-6">
+                            {categoryOrder.map((category) => (
+                                <div key={category}>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                                        {category}
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {grouped[category].map((link) => (
+                                            <li
+                                                key={link.id}
+                                                draggable
+                                                onDragStart={() => handleDragStart(link.id, link.category)}
+                                                onDragOver={(e) => handleDragOver(e, link.id, link.category)}
+                                                onDrop={(e) => handleDrop(e, link.id, link.category)}
+                                                onDragEnd={handleDragEnd}
+                                                className={`flex items-start gap-3 rounded-2xl border p-4 transition-colors select-none ${
+                                                    dragOverId === link.id
+                                                        ? "border-foreground/50 bg-foreground/5"
+                                                        : "border-border"
+                                                } ${dragItem?.id === link.id ? "opacity-40" : ""}`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="shrink-0 mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+                                                    aria-label="Drag to reorder"
+                                                >
+                                                    <GripVertical className="w-4 h-4" />
+                                                </button>
+                                                <PlatformBadge platform={link.platform} />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-medium text-sm">{link.title}</span>
+                                                        {link.tall && (
+                                                            <span className="px-2 py-0.5 rounded-full bg-foreground/5 text-xs text-muted-foreground">
+                                                                tall
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <a
+                                                        href={link.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-muted-foreground hover:text-foreground truncate block mt-0.5 max-w-xs"
+                                                    >
+                                                        {link.url}
+                                                    </a>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDelete(link.id)}
+                                                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 mt-0.5"
+                                                    aria-label="Delete"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
                             ))}
-                        </ul>
+                        </div>
                     )}
                 </section>
             </div>
