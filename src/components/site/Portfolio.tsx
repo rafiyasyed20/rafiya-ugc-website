@@ -1,9 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { X, ExternalLink } from "lucide-react";
-import { getPortfolioLinksFn, type PortfolioItem } from "@/lib/admin-fns";
-
-const filters = ["All", "Makeup", "Skincare", "Lifestyle", "Product Demo", "Voiceover", "B-Roll"];
+import { getPortfolioLinksFn, getCategoriesFn, type PortfolioItem } from "@/lib/admin-fns";
 
 // Module-level state so embed.js is only fetched once per page load
 let igScriptState: "idle" | "loading" | "loaded" = "idle";
@@ -39,13 +37,20 @@ export function Portfolio() {
     const [lightbox, setLightbox] = useState<PortfolioItem | null>(null);
     const [links, setLinks] = useState<PortfolioItem[]>([]);
     const [loaded, setLoaded] = useState(false);
+    const [categoryNames, setCategoryNames] = useState<string[]>([]);
 
     useEffect(() => {
         getPortfolioLinksFn()
             .then((data: PortfolioItem[]) => setLinks(Array.isArray(data) ? data : []))
             .catch(() => setLinks([]))
             .finally(() => setLoaded(true));
+
+        getCategoriesFn()
+            .then((data) => setCategoryNames((data as { name: string }[]).map((c) => c.name)))
+            .catch(() => setCategoryNames([]));
     }, []);
+
+    const filters = ["All", ...categoryNames];
 
     const filtered = active === "All" ? links : links.filter((l) => l.category === active);
 

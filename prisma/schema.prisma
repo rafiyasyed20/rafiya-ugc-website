@@ -7,15 +7,27 @@ datasource db {
 }
 
 model PortfolioLink {
-  id        String   @id @default(cuid())
-  url       String
-  platform  String
-  category  String
-  title     String
-  tall      Boolean  @default(false)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  url         String
+  platform    String
+  category    String
+  categoryId  String?   @map("category_id")
+  categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  title       String
+  tall        Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("portfolio_links")
+}
+
+model Category {
+  id             String          @id @default(cuid())
+  name           String          @unique
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  portfolioLinks PortfolioLink[]
+
+  @@map("categories")
 }

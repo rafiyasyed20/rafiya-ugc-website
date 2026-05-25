@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, Plus, LogOut, Eye, EyeOff, Shield, GripVertical } from "lucide-react";
+import {
+    Trash2,
+    Plus,
+    LogOut,
+    Eye,
+    EyeOff,
+    Shield,
+    GripVertical,
+    LayoutGrid,
+    Tag,
+    type LucideIcon,
+} from "lucide-react";
 import {
     loginFn,
     verifyTokenFn,
@@ -8,23 +19,21 @@ import {
     createPortfolioLinkFn,
     deletePortfolioLinkFn,
     reorderPortfolioLinksFn,
+    getCategoriesFn,
+    createCategoryFn,
+    deleteCategoryFn,
     type PortfolioItem,
+    type CategoryItem,
 } from "@/lib/admin-fns";
 
-const CATEGORIES = [
-    "Makeup",
-    "Skincare",
-    "Lifestyle",
-    "Product Demo",
-    "Voiceover",
-    "B-Roll",
-];
-
 const TOKEN_KEY = "admin_token";
+type AdminSection = "portfolio" | "categories";
 
 export const Route = createFileRoute("/admin")({
     component: AdminPage,
 });
+
+// ─── Auth shell ──────────────────────────────────────────────────────────────
 
 function AdminPage() {
     const [token, setToken] = useState<string | null>(null);
@@ -64,7 +73,6 @@ function AdminPage() {
     }
 
     if (!token) return <LoginForm onLogin={handleLogin} />;
-
     return <Dashboard token={token} onLogout={handleLogout} />;
 }
 
@@ -159,22 +167,13 @@ function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
     );
 }
 
-function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-    const [links, setLinks] = useState<PortfolioItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState("");
-    const [filter, setFilter] = useState("All");
-    const [dragItem, setDragItem] = useState<{ id: string; category: string } | null>(null);
-    const [dragOverId, setDragOverId] = useState<string | null>(null);
+// ─── Dashboard shell with sidebar ────────────────────────────────────────────
 
-    const [form, setForm] = useState({
-        url: "",
-        title: "",
-        category: CATEGORIES[0],
-        tall: false,
-        sortOrder: 0,
-    });
+function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
+    const [section, setSection] = useState<AdminSection>("portfolio");
+    const [links, setLinks] = useState<PortfolioItem[]>([]);
+    const [categories, setCategories] = useState<CategoryItem[]>([]);
+    const [loading, setLoading] = useState(true);
 
     const fetchLinks = useCallback(async () => {
         setLoading(true);
@@ -186,9 +185,142 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         }
     }, []);
 
+    const fetchCategories = useCallback(async () => {
+        const data = await getCategoriesFn();
+        setCategories(data as CategoryItem[]);
+    }, []);
+
     useEffect(() => {
         fetchLinks();
-    }, [fetchLinks]);
+        fetchCategories();
+    }, [fetchLinks, fetchCategories]);
+
+    return (
+        <div className="min-h-screen bg-background flex">
+            {/* Sidebar */}
+            <aside className="w-56 shrink-0 border-r border-border flex flex-col h-screen sticky top-0">
+                <div className="px-5 py-5 border-b border-border">
+                    <p className="font-semibold text-sm">rafiya.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Content Manager</p>
+                </div>
+
+                <nav className="p-3 flex-1 space-y-0.5 overflow-y-auto">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-3 pt-2 pb-1">
+                        Content
+                    </p>
+                    <NavItem
+                        icon={LayoutGrid}
+                        label="Portfolio"
+                        active={section === "portfolio"}
+                        onClick={() => setSection("portfolio")}
+                    />
+                    <NavItem
+                        icon={Tag}
+                        label="Categories"
+                        active={section === "categories"}
+                        onClick={() => setSection("categories")}
+                    />
+                </nav>
+
+                <div className="p-3 border-t border-border">
+                    <button
+                        onClick={onLogout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors"
+                    >
+                        <LogOut className="w-4 h-4 shrink-0" />
+                        Sign out
+                    </button>
+                </div>
+            </aside>
+
+            {/* Content area */}
+            <main className="flex-1 overflow-y-auto min-h-screen">
+                {section === "portfolio" && (
+                    <PortfolioSection
+                        token={token}
+                        links={links}
+                        setLinks={setLinks}
+                        categories={categories}
+                        loading={loading}
+                        fetchLinks={fetchLinks}
+                    />
+                )}
+                {section === "categories" && (
+                    <CategoriesSection
+                        token={token}
+                        categories={categories}
+                        setCategories={setCategories}
+                        links={links}
+                        fetchCategories={fetchCategories}
+                    />
+                )}
+            </main>
+        </div>
+    );
+}
+
+function NavItem({
+    icon: Icon,
+    label,
+    active,
+    onClick,
+}: {
+    icon: LucideIcon;
+    label: string;
+    active: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                active
+                    ? "bg-foreground text-background font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+            }`}
+        >
+            <Icon className="w-4 h-4 shrink-0" />
+            {label}
+        </button>
+    );
+}
+
+// ─── Portfolio section ────────────────────────────────────────────────────────
+
+function PortfolioSection({
+    token,
+    links,
+    setLinks,
+    categories,
+    loading,
+    fetchLinks,
+}: {
+    token: string;
+    links: PortfolioItem[];
+    setLinks: React.Dispatch<React.SetStateAction<PortfolioItem[]>>;
+    categories: CategoryItem[];
+    loading: boolean;
+    fetchLinks: () => Promise<void>;
+}) {
+    const [form, setForm] = useState({
+        url: "",
+        title: "",
+        categoryId: "",
+        tall: false,
+        sortOrder: 0,
+    });
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
+    const [filter, setFilter] = useState("All");
+    const [dragItem, setDragItem] = useState<{ id: string; category: string } | null>(null);
+    const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+    // Seed categoryId once categories load
+    useEffect(() => {
+        if (categories.length > 0) {
+            setForm((f) => (f.categoryId ? f : { ...f, categoryId: categories[0].id }));
+        }
+    }, [categories]);
 
     const detectPlatform = (url: string) => {
         if (url.includes("instagram.com")) return "instagram";
@@ -202,7 +334,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         setSubmitting(true);
         try {
             await createPortfolioLinkFn({ data: { ...form, token } });
-            setForm({ url: "", title: "", category: CATEGORIES[0], tall: false, sortOrder: 0 });
+            setForm((f) => ({ url: "", title: "", categoryId: f.categoryId, tall: false, sortOrder: 0 }));
             await fetchLinks();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to add link");
@@ -221,9 +353,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         }
     };
 
-    const handleDragStart = (id: string, category: string) => {
-        setDragItem({ id, category });
-    };
+    const handleDragStart = (id: string, category: string) => setDragItem({ id, category });
 
     const handleDragOver = (e: React.DragEvent, targetId: string, targetCategory: string) => {
         e.preventDefault();
@@ -254,8 +384,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
         setLinks((prev) => {
             const others = prev.filter((l) => l.category !== dragItem.category);
-            const updated = reordered.map((l, i) => ({ ...l, sortOrder: i * 10 }));
-            return [...others, ...updated];
+            return [...others, ...reordered.map((l, i) => ({ ...l, sortOrder: i * 10 }))];
         });
         setDragItem(null);
         setDragOverId(null);
@@ -272,9 +401,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         setDragOverId(null);
     };
 
+    const allFilterNames = ["All", ...categories.map((c) => c.name)];
     const sortedLinks = [...links].sort((a, b) => a.sortOrder - b.sortOrder);
-    const filtered = filter === "All" ? sortedLinks : sortedLinks.filter((l) => l.category === filter);
-    const allCategories = ["All", ...Array.from(new Set(links.map((l) => l.category)))];
+    const filtered =
+        filter === "All" ? sortedLinks : sortedLinks.filter((l) => l.category === filter);
     const grouped = filtered.reduce<Record<string, PortfolioItem[]>>((acc, link) => {
         (acc[link.category] ??= []).push(link);
         return acc;
@@ -282,239 +412,374 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     const categoryOrder = Array.from(new Set(filtered.map((l) => l.category)));
 
     return (
-        <div className="min-h-screen bg-background">
-            <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-                <div>
-                    <h1 className="font-semibold">Admin Dashboard</h1>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        {links.length} portfolio link{links.length !== 1 ? "s" : ""}
-                    </p>
-                </div>
-                <button
-                    onClick={onLogout}
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                    <LogOut className="w-4 h-4" />
-                    Sign out
-                </button>
-            </header>
+        <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+            {/* Page heading */}
+            <div>
+                <h1 className="font-semibold text-lg">Portfolio</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {links.length} link{links.length !== 1 ? "s" : ""}
+                </p>
+            </div>
 
-            <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-                <section>
-                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-                        Add Portfolio Link
-                    </h2>
-                    <form
-                        onSubmit={handleAdd}
-                        className="rounded-2xl border border-border p-5 space-y-4"
-                    >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="sm:col-span-2 space-y-1">
-                                <label className="text-sm font-medium">URL</label>
-                                <input
-                                    type="url"
-                                    placeholder="https://www.instagram.com/p/..."
-                                    value={form.url}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, url: e.target.value }))
-                                    }
-                                    required
-                                    className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                                />
-                                {form.url && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Platform:{" "}
-                                        <span className="font-medium">
-                                            {detectPlatform(form.url)}
-                                        </span>
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium">Title</label>
-                                <input
-                                    type="text"
-                                    placeholder="Glow Routine Edit"
-                                    value={form.title}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, title: e.target.value }))
-                                    }
-                                    required
-                                    className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium">Category</label>
-                                <select
-                                    value={form.category}
-                                    onChange={(e) =>
-                                        setForm((f) => ({ ...f, category: e.target.value }))
-                                    }
-                                    className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                                >
-                                    {CATEGORIES.map((c) => (
-                                        <option key={c} value={c}>
-                                            {c}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium">Sort Order</label>
-                                <input
-                                    type="number"
-                                    value={form.sortOrder}
-                                    onChange={(e) =>
-                                        setForm((f) => ({
-                                            ...f,
-                                            sortOrder: parseInt(e.target.value) || 0,
-                                        }))
-                                    }
-                                    className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={form.tall}
-                                    onClick={() => setForm((f) => ({ ...f, tall: !f.tall }))}
-                                    className={`relative w-10 h-6 rounded-full transition-colors ${form.tall ? "bg-foreground" : "bg-input"}`}
-                                >
-                                    <span
-                                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.tall ? "translate-x-4" : ""}`}
-                                    />
-                                </button>
-                                <label className="text-sm">
-                                    Tall card{" "}
-                                    <span className="text-muted-foreground">(3:4 ratio)</span>
-                                </label>
-                            </div>
+            {/* Add link form */}
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                    Add Link
+                </h2>
+                <form onSubmit={handleAdd} className="rounded-2xl border border-border p-5 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2 space-y-1">
+                            <label className="text-sm font-medium">URL</label>
+                            <input
+                                type="url"
+                                placeholder="https://www.instagram.com/p/..."
+                                value={form.url}
+                                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                            {form.url && (
+                                <p className="text-xs text-muted-foreground">
+                                    Platform:{" "}
+                                    <span className="font-medium">{detectPlatform(form.url)}</span>
+                                </p>
+                            )}
                         </div>
 
-                        {error && (
-                            <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/20 px-3 py-2 rounded-lg">
-                                {error}
-                            </p>
-                        )}
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Title</label>
+                            <input
+                                type="text"
+                                placeholder="Glow Routine Edit"
+                                value={form.title}
+                                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
 
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-                        >
-                            <Plus className="w-4 h-4" />
-                            {submitting ? "Adding…" : "Add link"}
-                        </button>
-                    </form>
-                </section>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Category</label>
+                            <select
+                                value={form.categoryId}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, categoryId: e.target.value }))
+                                }
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            >
+                                {categories.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                <section>
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                            Portfolio Links
-                        </h2>
-                        <div className="flex gap-2 flex-wrap justify-end">
-                            {allCategories.map((c) => (
-                                <button
-                                    key={c}
-                                    onClick={() => setFilter(c)}
-                                    className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                                        filter === c
-                                            ? "bg-foreground text-background"
-                                            : "border border-border text-muted-foreground hover:text-foreground"
-                                    }`}
-                                >
-                                    {c}
-                                </button>
-                            ))}
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Sort Order</label>
+                            <input
+                                type="number"
+                                value={form.sortOrder}
+                                onChange={(e) =>
+                                    setForm((f) => ({
+                                        ...f,
+                                        sortOrder: parseInt(e.target.value) || 0,
+                                    }))
+                                }
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={form.tall}
+                                onClick={() => setForm((f) => ({ ...f, tall: !f.tall }))}
+                                className={`relative w-10 h-6 rounded-full transition-colors ${form.tall ? "bg-foreground" : "bg-input"}`}
+                            >
+                                <span
+                                    className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.tall ? "translate-x-4" : ""}`}
+                                />
+                            </button>
+                            <label className="text-sm">
+                                Tall card{" "}
+                                <span className="text-muted-foreground">(3:4 ratio)</span>
+                            </label>
                         </div>
                     </div>
 
-                    {loading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="w-6 h-6 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
-                        </div>
-                    ) : filtered.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground text-sm">
-                            No links yet. Add your first portfolio link above.
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {categoryOrder.map((category) => (
-                                <div key={category}>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                                        {category}
-                                    </p>
-                                    <ul className="space-y-2">
-                                        {grouped[category].map((link) => (
-                                            <li
-                                                key={link.id}
-                                                draggable
-                                                onDragStart={() => handleDragStart(link.id, link.category)}
-                                                onDragOver={(e) => handleDragOver(e, link.id, link.category)}
-                                                onDrop={(e) => handleDrop(e, link.id, link.category)}
-                                                onDragEnd={handleDragEnd}
-                                                className={`flex items-start gap-3 rounded-2xl border p-4 transition-colors select-none ${
-                                                    dragOverId === link.id
-                                                        ? "border-foreground/50 bg-foreground/5"
-                                                        : "border-border"
-                                                } ${dragItem?.id === link.id ? "opacity-40" : ""}`}
-                                            >
-                                                <button
-                                                    type="button"
-                                                    className="shrink-0 mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
-                                                    aria-label="Drag to reorder"
-                                                >
-                                                    <GripVertical className="w-4 h-4" />
-                                                </button>
-                                                <PlatformBadge platform={link.platform} />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-medium text-sm">{link.title}</span>
-                                                        {link.tall && (
-                                                            <span className="px-2 py-0.5 rounded-full bg-foreground/5 text-xs text-muted-foreground">
-                                                                tall
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <a
-                                                        href={link.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-xs text-muted-foreground hover:text-foreground truncate block mt-0.5 max-w-xs"
-                                                    >
-                                                        {link.url}
-                                                    </a>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleDelete(link.id)}
-                                                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 mt-0.5"
-                                                    aria-label="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
+                    {error && (
+                        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/20 px-3 py-2 rounded-lg">
+                            {error}
+                        </p>
                     )}
-                </section>
-            </div>
+
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {submitting ? "Adding…" : "Add link"}
+                    </button>
+                </form>
+            </section>
+
+            {/* Links list */}
+            <section>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                        All Links
+                    </h2>
+                    <div className="flex gap-2 flex-wrap justify-end">
+                        {allFilterNames.map((name) => (
+                            <button
+                                key={name}
+                                onClick={() => setFilter(name)}
+                                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                                    filter === name
+                                        ? "bg-foreground text-background"
+                                        : "border border-border text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                {name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="flex justify-center py-12">
+                        <div className="w-6 h-6 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                        No links yet. Add your first portfolio link above.
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {categoryOrder.map((category) => (
+                            <div key={category}>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                                    {category}
+                                </p>
+                                <ul className="space-y-2">
+                                    {grouped[category].map((link) => (
+                                        <li
+                                            key={link.id}
+                                            draggable
+                                            onDragStart={() =>
+                                                handleDragStart(link.id, link.category)
+                                            }
+                                            onDragOver={(e) =>
+                                                handleDragOver(e, link.id, link.category)
+                                            }
+                                            onDrop={(e) => handleDrop(e, link.id, link.category)}
+                                            onDragEnd={handleDragEnd}
+                                            className={`flex items-start gap-3 rounded-2xl border p-4 transition-colors select-none ${
+                                                dragOverId === link.id
+                                                    ? "border-foreground/50 bg-foreground/5"
+                                                    : "border-border"
+                                            } ${dragItem?.id === link.id ? "opacity-40" : ""}`}
+                                        >
+                                            <button
+                                                type="button"
+                                                className="shrink-0 mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+                                                aria-label="Drag to reorder"
+                                            >
+                                                <GripVertical className="w-4 h-4" />
+                                            </button>
+                                            <PlatformBadge platform={link.platform} />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-medium text-sm">
+                                                        {link.title}
+                                                    </span>
+                                                    {link.tall && (
+                                                        <span className="px-2 py-0.5 rounded-full bg-foreground/5 text-xs text-muted-foreground">
+                                                            tall
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <a
+                                                    href={link.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-muted-foreground hover:text-foreground truncate block mt-0.5 max-w-xs"
+                                                >
+                                                    {link.url}
+                                                </a>
+                                            </div>
+                                            <button
+                                                onClick={() => handleDelete(link.id)}
+                                                className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 mt-0.5"
+                                                aria-label="Delete"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
         </div>
     );
 }
 
+// ─── Categories section ───────────────────────────────────────────────────────
+
+function CategoriesSection({
+    token,
+    categories,
+    setCategories,
+    links,
+    fetchCategories,
+}: {
+    token: string;
+    categories: CategoryItem[];
+    setCategories: React.Dispatch<React.SetStateAction<CategoryItem[]>>;
+    links: PortfolioItem[];
+    fetchCategories: () => Promise<void>;
+}) {
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [categorySubmitting, setCategorySubmitting] = useState(false);
+    const [rowError, setRowError] = useState<Record<string, string>>({});
+    const [addError, setAddError] = useState("");
+
+    const handleAdd = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const name = newCategoryName.trim();
+        if (!name) return;
+        setCategorySubmitting(true);
+        setAddError("");
+        try {
+            const created = await createCategoryFn({ data: { token, name } });
+            setCategories((prev) => [...prev, created as CategoryItem]);
+            setNewCategoryName("");
+        } catch (err) {
+            setAddError(err instanceof Error ? err.message : "Failed to add category");
+        } finally {
+            setCategorySubmitting(false);
+        }
+    };
+
+    const handleDelete = async (cat: CategoryItem) => {
+        // Client-side guard — use categoryId FK if available, fall back to name
+        const postCount = links.filter(
+            (l) => (l.categoryId ? l.categoryId === cat.id : l.category === cat.name)
+        ).length;
+
+        if (postCount > 0) {
+            setRowError({
+                [cat.id]: `Remove the ${postCount} post${postCount !== 1 ? "s" : ""} in "${cat.name}" first`,
+            });
+            return;
+        }
+        setRowError({});
+        try {
+            await deleteCategoryFn({ data: { token, id: cat.id } });
+            setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+        } catch (err) {
+            setRowError({
+                [cat.id]: err instanceof Error ? err.message : "Failed to delete",
+            });
+        }
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+            {/* Page heading */}
+            <div>
+                <h1 className="font-semibold text-lg">Categories</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
+                </p>
+            </div>
+
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                    Manage Categories
+                </h2>
+
+                <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
+                    {categories.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                            No categories yet. Add one below.
+                        </p>
+                    ) : (
+                        categories.map((cat) => {
+                            const count = links.filter(
+                                (l) =>
+                                    l.categoryId ? l.categoryId === cat.id : l.category === cat.name
+                            ).length;
+                            return (
+                                <div key={cat.id}>
+                                    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+                                        <span className="text-sm font-medium">{cat.name}</span>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-xs text-muted-foreground tabular-nums">
+                                                {count} post{count !== 1 ? "s" : ""}
+                                            </span>
+                                            <button
+                                                onClick={() => handleDelete(cat)}
+                                                className="text-muted-foreground hover:text-red-500 transition-colors"
+                                                aria-label={`Delete ${cat.name}`}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {rowError[cat.id] && (
+                                        <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 px-5 py-2 border-t border-red-100 dark:border-red-950/30">
+                                            {rowError[cat.id]}
+                                        </p>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Add form */}
+                <form onSubmit={handleAdd} className="flex gap-2 mt-4">
+                    <input
+                        type="text"
+                        placeholder="New category name"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        required
+                        className="flex-1 px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                    />
+                    <button
+                        type="submit"
+                        disabled={categorySubmitting}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors shrink-0"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {categorySubmitting ? "Adding…" : "Add"}
+                    </button>
+                </form>
+                {addError && (
+                    <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/20 px-3 py-2 rounded-lg mt-2">
+                        {addError}
+                    </p>
+                )}
+            </section>
+        </div>
+    );
+}
+
+// ─── Shared components ────────────────────────────────────────────────────────
+
 function PlatformBadge({ platform }: { platform: string }) {
     if (platform === "instagram") {
         return (
-            <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] flex items-center justify-center">
+            <span className="shrink-0 w-7 h-7 rounded-lg bg-linear-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] flex items-center justify-center">
                 <svg
                     viewBox="0 0 24 24"
                     className="w-3.5 h-3.5 fill-white"
@@ -527,7 +792,7 @@ function PlatformBadge({ platform }: { platform: string }) {
     }
     if (platform === "tiktok") {
         return (
-            <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-black flex items-center justify-center">
+            <span className="shrink-0 w-7 h-7 rounded-lg bg-black flex items-center justify-center">
                 <svg
                     viewBox="0 0 24 24"
                     className="w-3.5 h-3.5 fill-white"
@@ -539,7 +804,7 @@ function PlatformBadge({ platform }: { platform: string }) {
         );
     }
     return (
-        <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-foreground/10 flex items-center justify-center text-xs font-medium">
+        <span className="shrink-0 w-7 h-7 rounded-lg bg-foreground/10 flex items-center justify-center text-xs font-medium">
             ?
         </span>
     );
