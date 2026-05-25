@@ -234,6 +234,20 @@
 .animate-marquee {
     animation: marquee 30s linear infinite;
 }
+/* Instagram mosaic embed overrides
+   Instagram's embed.js sets inline styles on the generated iframe (width, min-width).
+   !important in a stylesheet overrides non-important inline styles, so these win. */
+.ig-embed-container {
+    width: 100%;
+    overflow: hidden;
+}
+.ig-embed-container iframe {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    display: block;
+}
+
 .animate-scroll-hint {
     animation: scroll-hint 2s ease-in-out infinite;
 }

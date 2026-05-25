@@ -10,6 +10,11 @@ import {
     GripVertical,
     LayoutGrid,
     Tag,
+    Store,
+    BarChart2,
+    Pencil,
+    Check,
+    X,
     type LucideIcon,
 } from "lucide-react";
 import {
@@ -22,12 +27,21 @@ import {
     getCategoriesFn,
     createCategoryFn,
     deleteCategoryFn,
+    getBrandsFn,
+    createBrandFn,
+    deleteBrandFn,
+    getStatsFn,
+    createStatFn,
+    updateStatValueFn,
+    deleteStatFn,
     type PortfolioItem,
     type CategoryItem,
+    type BrandItem,
+    type StatItem,
 } from "@/lib/admin-fns";
 
 const TOKEN_KEY = "admin_token";
-type AdminSection = "portfolio" | "categories";
+type AdminSection = "portfolio" | "categories" | "brands" | "stats";
 
 export const Route = createFileRoute("/admin")({
     component: AdminPage,
@@ -173,6 +187,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     const [section, setSection] = useState<AdminSection>("portfolio");
     const [links, setLinks] = useState<PortfolioItem[]>([]);
     const [categories, setCategories] = useState<CategoryItem[]>([]);
+    const [brands, setBrands] = useState<BrandItem[]>([]);
+    const [siteStats, setSiteStats] = useState<StatItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchLinks = useCallback(async () => {
@@ -190,10 +206,22 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         setCategories(data as CategoryItem[]);
     }, []);
 
+    const fetchBrands = useCallback(async () => {
+        const data = await getBrandsFn();
+        setBrands(data as BrandItem[]);
+    }, []);
+
+    const fetchStats = useCallback(async () => {
+        const data = await getStatsFn();
+        setSiteStats(data as StatItem[]);
+    }, []);
+
     useEffect(() => {
         fetchLinks();
         fetchCategories();
-    }, [fetchLinks, fetchCategories]);
+        fetchBrands();
+        fetchStats();
+    }, [fetchLinks, fetchCategories, fetchBrands, fetchStats]);
 
     return (
         <div className="min-h-screen bg-background flex">
@@ -219,6 +247,18 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                         label="Categories"
                         active={section === "categories"}
                         onClick={() => setSection("categories")}
+                    />
+                    <NavItem
+                        icon={Store}
+                        label="Brands"
+                        active={section === "brands"}
+                        onClick={() => setSection("brands")}
+                    />
+                    <NavItem
+                        icon={BarChart2}
+                        label="Stats"
+                        active={section === "stats"}
+                        onClick={() => setSection("stats")}
                     />
                 </nav>
 
@@ -252,6 +292,22 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                         setCategories={setCategories}
                         links={links}
                         fetchCategories={fetchCategories}
+                    />
+                )}
+                {section === "brands" && (
+                    <BrandsSection
+                        token={token}
+                        brands={brands}
+                        setBrands={setBrands}
+                        fetchBrands={fetchBrands}
+                    />
+                )}
+                {section === "stats" && (
+                    <StatsSection
+                        token={token}
+                        siteStats={siteStats}
+                        setSiteStats={setSiteStats}
+                        fetchStats={fetchStats}
                     />
                 )}
             </main>
@@ -769,6 +825,398 @@ function CategoriesSection({
                         {addError}
                     </p>
                 )}
+            </section>
+        </div>
+    );
+}
+
+// ─── Brands section ──────────────────────────────────────────────────────────
+
+function BrandsSection({
+    token,
+    brands,
+    setBrands,
+    fetchBrands,
+}: {
+    token: string;
+    brands: BrandItem[];
+    setBrands: React.Dispatch<React.SetStateAction<BrandItem[]>>;
+    fetchBrands: () => Promise<void>;
+}) {
+    const [form, setForm] = useState({ name: "", logoUrl: "", sortOrder: 0 });
+    const [submitting, setSubmitting] = useState(false);
+    const [addError, setAddError] = useState("");
+    const [rowError, setRowError] = useState<Record<string, string>>({});
+
+    const handleAdd = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const name = form.name.trim();
+        if (!name) return;
+        setSubmitting(true);
+        setAddError("");
+        try {
+            const created = await createBrandFn({
+                data: { token, name, logoUrl: form.logoUrl.trim() || "", sortOrder: form.sortOrder },
+            });
+            setBrands((prev) => [...prev, created as BrandItem]);
+            setForm({ name: "", logoUrl: "", sortOrder: 0 });
+        } catch (err) {
+            setAddError(err instanceof Error ? err.message : "Failed to add brand");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDelete = async (brand: BrandItem) => {
+        if (!confirm(`Delete "${brand.name}"?`)) return;
+        setRowError({});
+        try {
+            await deleteBrandFn({ data: { token, id: brand.id } });
+            setBrands((prev) => prev.filter((b) => b.id !== brand.id));
+        } catch (err) {
+            setRowError({ [brand.id]: err instanceof Error ? err.message : "Failed to delete" });
+        }
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+            <div>
+                <h1 className="font-semibold text-lg">Brands</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {brands.length} brand{brands.length !== 1 ? "s" : ""}
+                </p>
+            </div>
+
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                    Manage Brands
+                </h2>
+
+                <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
+                    {brands.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                            No brands yet. Add one below.
+                        </p>
+                    ) : (
+                        brands.map((brand) => (
+                            <div key={brand.id}>
+                                <div className="flex items-center gap-4 px-5 py-3.5">
+                                    {brand.logoUrl ? (
+                                        <img
+                                            src={brand.logoUrl}
+                                            alt={brand.name}
+                                            className="w-8 h-8 object-contain rounded"
+                                        />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded bg-foreground/5 flex items-center justify-center text-xs text-muted-foreground font-medium">
+                                            {brand.name.slice(0, 2).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <span className="text-sm font-medium flex-1">{brand.name}</span>
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                        order {brand.sortOrder}
+                                    </span>
+                                    <button
+                                        onClick={() => handleDelete(brand)}
+                                        className="text-muted-foreground hover:text-red-500 transition-colors"
+                                        aria-label={`Delete ${brand.name}`}
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                {rowError[brand.id] && (
+                                    <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 px-5 py-2 border-t border-red-100 dark:border-red-950/30">
+                                        {rowError[brand.id]}
+                                    </p>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <form onSubmit={handleAdd} className="mt-4 rounded-2xl border border-border p-5 space-y-4">
+                    <h3 className="text-sm font-medium">Add Brand</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Brand Name</label>
+                            <input
+                                type="text"
+                                placeholder="Aura Beauty"
+                                value={form.name}
+                                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">
+                                Logo URL{" "}
+                                <span className="text-muted-foreground font-normal">(optional)</span>
+                            </label>
+                            <input
+                                type="url"
+                                placeholder="https://example.com/logo.png"
+                                value={form.logoUrl}
+                                onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Sort Order</label>
+                            <input
+                                type="number"
+                                value={form.sortOrder}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))
+                                }
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                    </div>
+                    {addError && (
+                        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/20 px-3 py-2 rounded-lg">
+                            {addError}
+                        </p>
+                    )}
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {submitting ? "Adding…" : "Add brand"}
+                    </button>
+                </form>
+            </section>
+        </div>
+    );
+}
+
+// ─── Stats section ────────────────────────────────────────────────────────────
+
+function StatsSection({
+    token,
+    siteStats,
+    setSiteStats,
+    fetchStats: _fetchStats,
+}: {
+    token: string;
+    siteStats: StatItem[];
+    setSiteStats: React.Dispatch<React.SetStateAction<StatItem[]>>;
+    fetchStats: () => Promise<void>;
+}) {
+    const [form, setForm] = useState({ label: "", value: "", sortOrder: 0 });
+    const [submitting, setSubmitting] = useState(false);
+    const [addError, setAddError] = useState("");
+    const [rowError, setRowError] = useState<Record<string, string>>({});
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    const handleAdd = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const label = form.label.trim();
+        const value = form.value.trim();
+        if (!label || !value) return;
+        setSubmitting(true);
+        setAddError("");
+        try {
+            const created = await createStatFn({
+                data: { token, label, value, sortOrder: form.sortOrder },
+            });
+            setSiteStats((prev) => [...prev, created as StatItem]);
+            setForm({ label: "", value: "", sortOrder: 0 });
+        } catch (err) {
+            setAddError(err instanceof Error ? err.message : "Failed to add stat");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const startEdit = (stat: StatItem) => {
+        setEditingId(stat.id);
+        setEditValue(stat.value);
+        setRowError({});
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
+        setEditValue("");
+    };
+
+    const handleSave = async (id: string) => {
+        const value = editValue.trim();
+        if (!value) return;
+        setSaving(true);
+        setRowError({});
+        try {
+            const updated = await updateStatValueFn({ data: { token, id, value } });
+            setSiteStats((prev) =>
+                prev.map((s) => (s.id === id ? (updated as StatItem) : s))
+            );
+            setEditingId(null);
+            setEditValue("");
+        } catch (err) {
+            setRowError({ [id]: err instanceof Error ? err.message : "Failed to save" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (stat: StatItem) => {
+        if (!confirm(`Delete "${stat.label}"?`)) return;
+        setRowError({});
+        try {
+            await deleteStatFn({ data: { token, id: stat.id } });
+            setSiteStats((prev) => prev.filter((s) => s.id !== stat.id));
+        } catch (err) {
+            setRowError({ [stat.id]: err instanceof Error ? err.message : "Failed to delete" });
+        }
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+            <div>
+                <h1 className="font-semibold text-lg">Stats</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {siteStats.length} stat{siteStats.length !== 1 ? "s" : ""}
+                    {siteStats.length === 0 && " — site shows built-in defaults"}
+                </p>
+            </div>
+
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                    Manage Stats
+                </h2>
+
+                <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
+                    {siteStats.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                            No stats configured. Add one below — the site will use them instead of the defaults.
+                        </p>
+                    ) : (
+                        siteStats.map((stat) => (
+                            <div key={stat.id}>
+                                {editingId === stat.id ? (
+                                    <div className="flex items-center gap-3 px-5 py-3">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium mb-1.5">{stat.label}</p>
+                                            <input
+                                                type="text"
+                                                value={editValue}
+                                                onChange={(e) => setEditValue(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") handleSave(stat.id);
+                                                    if (e.key === "Escape") cancelEdit();
+                                                }}
+                                                autoFocus
+                                                className="w-full px-3 py-1.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                                onClick={() => handleSave(stat.id)}
+                                                disabled={saving}
+                                                className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 disabled:opacity-50 transition-colors"
+                                                aria-label="Save"
+                                            >
+                                                <Check className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={cancelEdit}
+                                                className="p-1.5 rounded-lg text-muted-foreground hover:bg-foreground/5 transition-colors"
+                                                aria-label="Cancel"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-4 px-5 py-3.5">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium">{stat.label}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                <span className="font-mono font-semibold">{stat.value}</span>
+                                                {" · "}order {stat.sortOrder}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => startEdit(stat)}
+                                            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                                            aria-label={`Edit ${stat.label}`}
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(stat)}
+                                            className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+                                            aria-label={`Delete ${stat.label}`}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                                {rowError[stat.id] && (
+                                    <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 px-5 py-2 border-t border-red-100 dark:border-red-950/30">
+                                        {rowError[stat.id]}
+                                    </p>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <form onSubmit={handleAdd} className="mt-4 rounded-2xl border border-border p-5 space-y-4">
+                    <h3 className="text-sm font-medium">Add Stat</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2 space-y-1">
+                            <label className="text-sm font-medium">Label</label>
+                            <input
+                                type="text"
+                                placeholder="Instagram Followers"
+                                value={form.label}
+                                onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Value</label>
+                            <input
+                                type="text"
+                                placeholder="4,300  or  70%  or  1.2M"
+                                value={form.value}
+                                onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">Sort Order</label>
+                            <input
+                                type="number"
+                                value={form.sortOrder}
+                                onChange={(e) =>
+                                    setForm((f) => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))
+                                }
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                            />
+                        </div>
+                    </div>
+                    {addError && (
+                        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/20 px-3 py-2 rounded-lg">
+                            {addError}
+                        </p>
+                    )}
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {submitting ? "Adding…" : "Add stat"}
+                    </button>
+                </form>
             </section>
         </div>
     );

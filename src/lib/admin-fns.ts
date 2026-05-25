@@ -20,6 +20,20 @@ export type CategoryItem = {
     sortOrder: number;
 };
 
+export type BrandItem = {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    sortOrder: number;
+};
+
+export type StatItem = {
+    id: string;
+    label: string;
+    value: string;
+    sortOrder: number;
+};
+
 async function getExpectedToken(): Promise<string> {
     const username = process.env.ADMIN_USERNAME ?? "";
     const password = process.env.ADMIN_PASSWORD ?? "";
@@ -169,6 +183,102 @@ export const deleteCategoryFn = createServerFn({ method: "POST" })
         }
 
         await getDb().category.delete({ where: { id: data.id } });
+        return { success: true };
+    });
+
+// ─── Brands ──────────────────────────────────────────────────────────────────
+
+export const getBrandsFn = createServerFn({ method: "GET" }).handler(async () => {
+    try {
+        return await getDb().brand.findMany({
+            select: { id: true, name: true, logoUrl: true, sortOrder: true },
+            orderBy: { sortOrder: "asc" },
+        });
+    } catch {
+        return [] as BrandItem[];
+    }
+});
+
+export const createBrandFn = createServerFn({ method: "POST" })
+    .inputValidator(
+        z.object({
+            token: z.string(),
+            name: z.string().min(1),
+            logoUrl: z.string().url().optional().or(z.literal("")),
+            sortOrder: z.number().default(0),
+        })
+    )
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        const { token: _token, logoUrl, ...rest } = data;
+        const count = await getDb().brand.count();
+        return await getDb().brand.create({
+            data: { ...rest, logoUrl: logoUrl || null, sortOrder: rest.sortOrder ?? count * 10 },
+            select: { id: true, name: true, logoUrl: true, sortOrder: true },
+        });
+    });
+
+export const deleteBrandFn = createServerFn({ method: "POST" })
+    .inputValidator(z.object({ token: z.string(), id: z.string() }))
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        await getDb().brand.delete({ where: { id: data.id } });
+        return { success: true };
+    });
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+export const getStatsFn = createServerFn({ method: "GET" }).handler(async () => {
+    try {
+        return await getDb().stat.findMany({
+            select: { id: true, label: true, value: true, sortOrder: true },
+            orderBy: { sortOrder: "asc" },
+        });
+    } catch {
+        return [] as StatItem[];
+    }
+});
+
+export const createStatFn = createServerFn({ method: "POST" })
+    .inputValidator(
+        z.object({
+            token: z.string(),
+            label: z.string().min(1),
+            value: z.string().min(1),
+            sortOrder: z.number().default(0),
+        })
+    )
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        const { token: _token, ...rest } = data;
+        const count = await getDb().stat.count();
+        return await getDb().stat.create({
+            data: { ...rest, sortOrder: rest.sortOrder ?? count * 10 },
+            select: { id: true, label: true, value: true, sortOrder: true },
+        });
+    });
+
+export const updateStatValueFn = createServerFn({ method: "POST" })
+    .inputValidator(z.object({ token: z.string(), id: z.string(), value: z.string().min(1) }))
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        return await getDb().stat.update({
+            where: { id: data.id },
+            data: { value: data.value },
+            select: { id: true, label: true, value: true, sortOrder: true },
+        });
+    });
+
+export const deleteStatFn = createServerFn({ method: "POST" })
+    .inputValidator(z.object({ token: z.string(), id: z.string() }))
+    .handler(async ({ data }) => {
+        const expected = await getExpectedToken();
+        if (data.token !== expected) throw new Error("Unauthorized");
+        await getDb().stat.delete({ where: { id: data.id } });
         return { success: true };
     });
 

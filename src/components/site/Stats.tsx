@@ -1,41 +1,29 @@
-import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { Instagram } from "lucide-react";
+import { getStatsFn, type StatItem } from "@/lib/admin-fns";
 
-const stats = [
-    { value: 84, suffix: "K", label: "Instagram Followers" },
-    { value: 120, suffix: "K", label: "TikTok Followers" },
-    { value: 7.8, suffix: "%", label: "Engagement Rate", decimals: 1 },
-    { value: 2.4, suffix: "M", label: "Monthly Reach", decimals: 1 },
-    { value: 65, suffix: "K", label: "Avg. Views" },
-    { value: 90, suffix: "+", label: "Brand Collabs" },
+const DEFAULT_STATS: StatItem[] = [
+    { id: "d1", label: "Instagram Followers", value: "4,300", sortOrder: 0 },
+    { id: "d2", label: "TikTok Followers", value: "2,000", sortOrder: 10 },
+    { id: "d3", label: "Engagement Rate", value: "70%", sortOrder: 20 },
+    { id: "d4", label: "Monthly Reach", value: "1.2M", sortOrder: 30 },
+    { id: "d5", label: "Avg. Views", value: "30K", sortOrder: 40 },
+    { id: "d6", label: "Brand Collabs", value: "90+", sortOrder: 50 },
 ];
 
-function Counter({ to, decimals = 0 }: { to: number; decimals?: number }) {
-    const ref = useRef<HTMLSpanElement>(null);
-    const inView = useInView(ref, { once: true, margin: "-50px" });
-    const count = useMotionValue(0);
-    const rounded = useTransform(count, (v) => v.toFixed(decimals));
+export function Stats() {
+    const [stats, setStats] = useState<StatItem[]>(DEFAULT_STATS);
 
     useEffect(() => {
-        if (inView) {
-            const controls = animate(count, to, { duration: 1.8, ease: "easeOut" });
-            return controls.stop;
-        }
-    }, [inView, to, count]);
+        getStatsFn()
+            .then((data) => {
+                const items = data as StatItem[];
+                if (items.length > 0) setStats(items);
+            })
+            .catch(() => {});
+    }, []);
 
-    useEffect(
-        () =>
-            rounded.on("change", (v) => {
-                if (ref.current) ref.current.textContent = v;
-            }),
-        [rounded],
-    );
-
-    return <span ref={ref}>0</span>;
-}
-
-export function Stats() {
     return (
         <section id="stats" className="relative py-28 px-6 bg-gradient-soft">
             <div className="mx-auto max-w-6xl">
@@ -58,7 +46,7 @@ export function Stats() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
                     {stats.map((s, i) => (
                         <motion.div
-                            key={s.label}
+                            key={s.id}
                             initial={{ opacity: 0, y: 30 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
@@ -66,8 +54,7 @@ export function Stats() {
                             className="glass rounded-3xl p-8 text-center shadow-card hover:shadow-soft hover:-translate-y-1 transition"
                         >
                             <p className="font-serif text-5xl sm:text-6xl text-gradient">
-                                <Counter to={s.value} decimals={s.decimals ?? 0} />
-                                {s.suffix}
+                                {s.value}
                             </p>
                             <p className="text-sm text-muted-foreground mt-3 uppercase tracking-wider">
                                 {s.label}

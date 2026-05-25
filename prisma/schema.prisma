@@ -31,3 +31,23 @@ model Category {
 
   @@map("categories")
 }
+
+model Brand {
+  id        String   @id @default(cuid())
+  name      String
+  logoUrl   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("brands")
+}
+
+model Stat {
+  id        String   @id @default(cuid())
+  label     String
+  value     String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("stats")
+}

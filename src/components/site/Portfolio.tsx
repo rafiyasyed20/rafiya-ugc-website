@@ -100,7 +100,7 @@ export function Portfolio() {
                 ) : (
                     <motion.div
                         layout
-                        className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5"
+                        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 items-start"
                     >
                         <AnimatePresence>
                             {filtered.map((item, i) =>
@@ -108,9 +108,9 @@ export function Portfolio() {
                                     <motion.div
                                         key={item.id}
                                         layout
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
                                         transition={{ duration: 0.4, delay: i * 0.04 }}
                                         className="break-inside-avoid"
                                     >
@@ -247,17 +247,23 @@ function ViewModal({ link, onClose }: { link: PortfolioItem; onClose: () => void
 }
 
 function instagramCanonicalUrl(raw: string): string {
-    // Instagram's embed endpoint only works with /p/SHORTCODE/ — strip the username prefix if present
-    const shortcode = raw.match(/\/p\/([A-Za-z0-9_-]+)/)?.[1];
-    return shortcode ? `https://www.instagram.com/p/${shortcode}/` : raw;
+    // /reel/SHORTCODE/ URLs must stay as reels — Instagram's embed.js uses the path
+    // to decide whether to render an inline video player or a static post embed.
+    // Stripping to /p/ would break inline playback and cause stretched thumbnails.
+    const reelCode = raw.match(/\/reel\/([A-Za-z0-9_-]+)/)?.[1];
+    if (reelCode) return `https://www.instagram.com/reel/${reelCode}/`;
+
+    // Regular posts: strip username prefix so embed.js gets a clean /p/SHORTCODE/ URL
+    const postCode = raw.match(/\/p\/([A-Za-z0-9_-]+)/)?.[1];
+    return postCode ? `https://www.instagram.com/p/${postCode}/` : raw;
 }
 
-// Instagram's profile-header row (avatar + username + follow button) is roughly
-// 56 px tall inside their embed iframe.  We can't touch the iframe's DOM
-// (cross-origin), but clip-path on the *outside* wrapper crops the painted pixels
-// of everything inside — including the iframe — before they reach the screen.
-// A matching negative margin-top reclaims that layout space so the grid stays tight.
-const IG_CLIP_PX = 56;
+// Instagram's profile-header row height varies: ~56 px for photos, ~60 px for reels.
+// We hide it via overflow:hidden on a wrapper + a matching negative marginTop on the
+// inner element. This is iframe-safe (unlike clipPath which creates a compositing
+// layer that distorts video thumbnails). The wrapper naturally shrinks by IG_CLIP_PX
+// so no extra margin is needed to reclaim layout space.
+const IG_CLIP_PX = 60;
 
 function InstagramEmbed({ url }: { url: string }) {
     const innerRef = useRef<HTMLDivElement>(null);
@@ -272,7 +278,7 @@ function InstagramEmbed({ url }: { url: string }) {
             class="instagram-media"
             data-instgrm-permalink="${embedHref}"
             data-instgrm-version="14"
-            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:1px auto;max-width:540px;min-width:326px;padding:0;width:99.375%;width:-webkit-calc(100% - 2px);width:calc(100% - 2px);">
+            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:0;padding:0;width:100%;">
         </blockquote>`;
 
         ensureInstagramEmbedJs(() => {
@@ -286,15 +292,8 @@ function InstagramEmbed({ url }: { url: string }) {
     }, [canonical, embedHref]);
 
     return (
-        <div
-            style={{
-                // Crop the top IG_CLIP_PX of painted output (hides the header row)
-                clipPath: `inset(${IG_CLIP_PX}px 0 0 0)`,
-                // Pull the element up by the same amount so the grid gap is unchanged
-                marginTop: `-${IG_CLIP_PX}px`,
-            }}
-        >
-            <div ref={innerRef} />
+        <div className="ig-embed-container">
+            <div ref={innerRef} style={{ marginTop: `-${IG_CLIP_PX}px` }} />
         </div>
     );
 }

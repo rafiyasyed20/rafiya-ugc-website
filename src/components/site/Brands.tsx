@@ -1,16 +1,18 @@
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { getBrandsFn, type BrandItem } from "@/lib/admin-fns";
 
-const brandNames = [
-    "GLOSSIÈRE",
-    "Maison Rouge",
-    "Petal & Co.",
-    "Lumière",
-    "Soft Studio",
-    "Aura Beauty",
-    "Velvet Co.",
-    "Bloom Lab",
-    "Saint Rose",
-    "Maeve",
+const DEFAULT_BRANDS: BrandItem[] = [
+    { id: "d1", name: "GLOSSIÈRE", logoUrl: null, sortOrder: 0 },
+    { id: "d2", name: "Maison Rouge", logoUrl: null, sortOrder: 10 },
+    { id: "d3", name: "Petal & Co.", logoUrl: null, sortOrder: 20 },
+    { id: "d4", name: "Lumière", logoUrl: null, sortOrder: 30 },
+    { id: "d5", name: "Soft Studio", logoUrl: null, sortOrder: 40 },
+    { id: "d6", name: "Aura Beauty", logoUrl: null, sortOrder: 50 },
+    { id: "d7", name: "Velvet Co.", logoUrl: null, sortOrder: 60 },
+    { id: "d8", name: "Bloom Lab", logoUrl: null, sortOrder: 70 },
+    { id: "d9", name: "Saint Rose", logoUrl: null, sortOrder: 80 },
+    { id: "d10", name: "Maeve", logoUrl: null, sortOrder: 90 },
 ];
 
 const testimonials = [
@@ -32,6 +34,19 @@ const testimonials = [
 ];
 
 export function Brands() {
+    const [brands, setBrands] = useState<BrandItem[]>(DEFAULT_BRANDS);
+
+    useEffect(() => {
+        getBrandsFn()
+            .then((data) => {
+                const items = data as BrandItem[];
+                if (items.length > 0) setBrands(items);
+            })
+            .catch(() => {});
+    }, []);
+
+    const marqueeItems = [...brands, ...brands];
+
     return (
         <section id="brands" className="relative py-28 bg-gradient-soft overflow-hidden">
             <div className="mx-auto max-w-6xl px-6">
@@ -52,12 +67,21 @@ export function Brands() {
 
             <div className="relative w-full overflow-hidden mask-marquee">
                 <div className="flex w-max animate-marquee">
-                    {[...brandNames, ...brandNames].map((name, i) => (
+                    {marqueeItems.map((brand, i) => (
                         <div
-                            key={i}
-                            className="px-10 py-6 font-serif text-2xl text-mauve/70 tracking-wide whitespace-nowrap"
+                            key={`${brand.id}-${i}`}
+                            className="px-10 py-6 flex items-center gap-3 whitespace-nowrap"
                         >
-                            {name}
+                            {brand.logoUrl ? (
+                                <img
+                                    src={brand.logoUrl}
+                                    alt={brand.name}
+                                    className="h-7 w-auto object-contain"
+                                />
+                            ) : null}
+                            <span className="font-serif text-2xl text-mauve/70 tracking-wide">
+                                {brand.name}
+                            </span>
                         </div>
                     ))}
                 </div>
