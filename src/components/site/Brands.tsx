@@ -76,10 +76,10 @@ export function Brands() {
                                 <img
                                     src={brand.logoUrl}
                                     alt={brand.name}
-                                    className="h-7 w-auto object-contain"
+                                    className="h-16 w-auto object-contain"
                                 />
                             ) : null}
-                            <span className="font-serif text-2xl text-mauve/70 tracking-wide">
+                            <span className="font-serif text-xl text-mauve/70 tracking-wide">
                                 {brand.name}
                             </span>
                         </div>

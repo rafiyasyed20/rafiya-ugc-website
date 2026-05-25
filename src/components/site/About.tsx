@@ -30,12 +30,12 @@ export function About() {
                         designed to help brands build trust and connect with modern audiences.
                     </p>
                     <p className="mt-4 text-muted-foreground leading-relaxed">
-                        Every piece is crafted with editorial care — color, composition, and cadence
+                        Every piece is crafted with editorial care - color, composition, and cadence
                         working together to feel native to the feed and impossible to scroll past.
                     </p>
                 </motion.div>
 
-                <div className="grid sm:grid-cols-2 gap-5">
+                <div className="grid sm:grid-cols-2 gap-8">
                     {cards.map((c, i) => (
                         <motion.div
                             key={c.title}
@@ -44,8 +44,8 @@ export function About() {
                             viewport={{ once: true }}
                             transition={{ duration: 0.6, delay: i * 0.1 }}
                             className={`glass rounded-3xl p-7 shadow-card hover:shadow-soft transition ${
-                                i === 0 ? "sm:translate-y-6" : ""
-                            } ${i === 2 ? "sm:col-span-2 sm:-translate-y-2" : ""}`}
+                                i === 0 ? "sm:translate-y-3" : ""
+                            } ${i === 2 ? "sm:col-span-2" : ""}`}
                         >
                             <div className="w-11 h-11 rounded-2xl bg-gradient-accent grid place-items-center text-primary-foreground mb-4">
                                 <c.icon className="w-5 h-5" />

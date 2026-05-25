@@ -87,7 +87,7 @@ export function Hero() {
                     </div>
                     <div className="absolute -top-4 -right-4 glass rounded-full w-20 h-20 grid place-items-center shadow-card">
                         <div className="text-center">
-                            <p className="font-serif text-xl leading-none">90+</p>
+                            <p className="font-serif text-xl leading-none">70+</p>
                             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
                                 Brands
                             </p>
